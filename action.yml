@@ -1,0 +1,31 @@
+name: 'flaky-finder'
+description: 'Detect flaky tests in your GitHub Actions workflows'
+author: 'Hénoc HOUNSA'
+
+branding:
+  icon: 'alert-circle'
+  color: 'orange'
+
+inputs:
+  github-token:
+    description: 'GitHub token with actions:read permission'
+    required: true
+    default: ${{ github.token }}
+
+  lookback-runs:
+    description: 'Number of past runs to analyze (max 100)'
+    required: false
+    default: '30'
+
+  post-comment:
+    description: 'Post results as PR comment'
+    required: false
+    default: 'true'
+
+outputs:
+  flaky-count:
+    description: 'Number of flaky jobs detected'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
