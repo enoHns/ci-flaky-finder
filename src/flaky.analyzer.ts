@@ -64,14 +64,18 @@ export async function detectFlaky(
 
     if (isFlaky) {
       const pattern = detectPattern(history, failureRate, durationCV)
+      const lastFailed = history
+        .filter(r => r.conclusion === 'failure')
+        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0]
+
       flaky.push({
         jobName,
-        stepName:      'unknown',
+        stepName:      findFlakyStep(history),
         failureRate,
         occurrences:   history.length,
         avgDurationMs: average(durations),
         durationCV,
-        lastFailedAt:  '',
+        lastFailedAt:  lastFailed?.startedAt ?? '',
         pattern,
         suggestedFix:  getSuggestedFix(pattern),
       })
@@ -83,7 +87,41 @@ export async function detectFlaky(
   flaky.sort((a, b) => b.failureRate - a.failureRate)
   core.info(`  Found ${flaky.length} flaky jobs out of ${jobHistories.size} analyzed`)
 
-  return { flaky, stable, newFlaky: [], improved: [], totalAnalyzed: jobHistories.size }
+  return {
+    flaky,
+    stable,
+    newFlaky: flaky.filter(f => f.occurrences <= 3),
+    improved: [],
+    totalAnalyzed: jobHistories.size,
+  }
+}
+
+function findFlakyStep(history: JobRun[]): string {
+  const stepFailures: Map<string, number> = new Map()
+  const stepTotal:    Map<string, number> = new Map()
+
+  for (const run of history) {
+    for (const step of run.steps) {
+      stepTotal.set(step.name, (stepTotal.get(step.name) ?? 0) + 1)
+      if (step.conclusion === 'failure') {
+        stepFailures.set(step.name, (stepFailures.get(step.name) ?? 0) + 1)
+      }
+    }
+  }
+
+  let worstStep = 'unknown'
+  let worstRate = 0
+
+  for (const [name, total] of stepTotal.entries()) {
+    const fails = stepFailures.get(name) ?? 0
+    const rate  = fails / total
+    if (rate > 0.05 && rate < 0.85 && rate > worstRate) {
+      worstRate = rate
+      worstStep = name
+    }
+  }
+
+  return worstStep
 }
 
 function detectPattern(
