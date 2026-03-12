@@ -58,11 +58,10 @@ export async function detectFlaky(
     const durations  = history.map(r => r.durationMs).filter(d => d > 0)
     const durationCV = durations.length > 1 ? coefficientOfVariation(durations) : 0
 
-    const isFlaky =
-      (failureRate > 0.05 && failureRate < 0.85) ||
-      durationCV > 0.40
+    const isNondeterministic = failureRate > 0.05 && failureRate < 0.85
+    const isTimingUnstable   = durationCV > 0.40 && failureRate < 0.85
 
-    if (isFlaky) {
+    if (isNondeterministic || isTimingUnstable) {
       const pattern = detectPattern(history, failureRate, durationCV)
       const lastFailed = history
         .filter(r => r.conclusion === 'failure')
