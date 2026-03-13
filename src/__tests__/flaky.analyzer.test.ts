@@ -3,14 +3,8 @@ import { detectFlaky } from '../flaky.analyzer'
 function makeRun(id: number, conclusion: string, startedAt: string, durationMs = 30000) {
   const completedAt = new Date(new Date(startedAt).getTime() + durationMs).toISOString()
   return {
-    id,
-    conclusion,
-    startedAt,
-    completedAt,
-    durationMs,
-    steps: [
-      { name: 'Run tests', conclusion, durationMs },
-    ],
+    id, conclusion, startedAt, completedAt, durationMs,
+    steps: [{ name: 'Run tests', conclusion, durationMs }],
   }
 }
 
@@ -40,21 +34,19 @@ function makeMockOctokit(histories: Record<string, ReturnType<typeof makeRun>[]>
   } as any
 }
 
-describe('detectFlaky', () => {
-  const base = '2026-03-01T10:00:00Z'
-  const hour = 3600000
+const base = '2026-03-01T10:00:00Z'
+const hour = 3600000
 
+describe('detectFlaky', () => {
   it('returns empty report when all jobs are stable', async () => {
     const runs = Array.from({ length: 5 }, (_, i) => ({
-      id: i + 1,
-      conclusion: 'success',
-      started_at: new Date(new Date(base).getTime() + i * hour).toISOString(),
+      id: i + 1, conclusion: 'success',
+      started_at:   new Date(new Date(base).getTime() + i * hour).toISOString(),
       completed_at: new Date(new Date(base).getTime() + i * hour + 30000).toISOString(),
     }))
     const octokit = makeMockOctokit({
-      'build': Array.from({ length: 5 }, (_, i) =>
-        makeRun(i + 1, 'success', new Date(new Date(base).getTime() + i * hour).toISOString())
-      ),
+      build: Array.from({ length: 5 }, (_, i) =>
+        makeRun(i + 1, 'success', new Date(new Date(base).getTime() + i * hour).toISOString())),
     })
     const report = await detectFlaky(octokit, 'owner', 'repo', runs)
     expect(report.flaky).toHaveLength(0)
@@ -63,16 +55,14 @@ describe('detectFlaky', () => {
 
   it('detects intermittent job', async () => {
     const runs = Array.from({ length: 8 }, (_, i) => ({
-      id: i + 1,
-      conclusion: i % 3 === 0 ? 'failure' : 'success',
-      started_at: new Date(new Date(base).getTime() + i * hour).toISOString(),
+      id: i + 1, conclusion: i % 3 === 0 ? 'failure' : 'success',
+      started_at:   new Date(new Date(base).getTime() + i * hour).toISOString(),
       completed_at: new Date(new Date(base).getTime() + i * hour + 30000).toISOString(),
     }))
     const octokit = makeMockOctokit({
-      'test': Array.from({ length: 8 }, (_, i) =>
+      test: Array.from({ length: 8 }, (_, i) =>
         makeRun(i + 1, i % 3 === 0 ? 'failure' : 'success',
-          new Date(new Date(base).getTime() + i * hour).toISOString())
-      ),
+          new Date(new Date(base).getTime() + i * hour).toISOString())),
     })
     const report = await detectFlaky(octokit, 'owner', 'repo', runs)
     expect(report.flaky.length).toBeGreaterThan(0)
@@ -80,17 +70,29 @@ describe('detectFlaky', () => {
     expect(report.flaky[0].pattern).toBe('intermittent')
   })
 
+  it('does NOT flag always-failing jobs as flaky', async () => {
+    const runs = Array.from({ length: 6 }, (_, i) => ({
+      id: i + 1, conclusion: 'failure',
+      started_at:   new Date(new Date(base).getTime() + i * hour).toISOString(),
+      completed_at: new Date(new Date(base).getTime() + i * hour + 30000).toISOString(),
+    }))
+    const octokit = makeMockOctokit({
+      deploy: Array.from({ length: 6 }, (_, i) =>
+        makeRun(i + 1, 'failure', new Date(new Date(base).getTime() + i * hour).toISOString())),
+    })
+    const report = await detectFlaky(octokit, 'owner', 'repo', runs)
+    expect(report.flaky.map(f => f.jobName)).not.toContain('deploy')
+  })
+
   it('skips jobs with fewer than 3 data points', async () => {
     const runs = Array.from({ length: 2 }, (_, i) => ({
-      id: i + 1,
-      conclusion: 'failure',
-      started_at: new Date(new Date(base).getTime() + i * hour).toISOString(),
+      id: i + 1, conclusion: 'failure',
+      started_at:   new Date(new Date(base).getTime() + i * hour).toISOString(),
       completed_at: new Date(new Date(base).getTime() + i * hour + 1000).toISOString(),
     }))
     const octokit = makeMockOctokit({
-      'lint': Array.from({ length: 2 }, (_, i) =>
-        makeRun(i + 1, 'failure', new Date(new Date(base).getTime() + i * hour).toISOString())
-      ),
+      lint: Array.from({ length: 2 }, (_, i) =>
+        makeRun(i + 1, 'failure', new Date(new Date(base).getTime() + i * hour).toISOString())),
     })
     const report = await detectFlaky(octokit, 'owner', 'repo', runs)
     expect(report.flaky).toHaveLength(0)
