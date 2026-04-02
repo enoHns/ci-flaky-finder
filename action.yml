@@ -8,19 +8,24 @@ branding:
 
 inputs:
   github-token:
-    description: 'GitHub token with actions:read permission'
+    description: 'GitHub token with actions:read and pull-requests:write permissions'
     required: true
     default: ${{ github.token }}
 
   lookback-runs:
-    description: 'Number of past runs to analyze (max 100)'
+    description: 'Number of past workflow runs to analyze (max 100)'
     required: false
     default: '30'
 
   post-comment:
-    description: 'Post results as PR comment'
+    description: 'Post results as a PR comment (updated on every push)'
     required: false
     default: 'true'
+
+  fail-on-flaky:
+    description: 'Fail the step if any flaky job is detected'
+    required: false
+    default: 'false'
 
 outputs:
   flaky-count:

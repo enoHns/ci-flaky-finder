@@ -6,9 +6,10 @@ import { renderReport } from './reporter'
 
 async function run(): Promise<void> {
   try {
-    const token       = core.getInput('github-token', { required: true })
-    const lookback    = parseInt(core.getInput('lookback-runs') || '30')
+    const token      = core.getInput('github-token', { required: true })
+    const lookback   = parseInt(core.getInput('lookback-runs') || '30')
     const postComment = core.getBooleanInput('post-comment')
+    const failOnFlaky = core.getBooleanInput('fail-on-flaky')
 
     const octokit = new Octokit({ auth: token })
     const ctx     = github.context
@@ -29,6 +30,11 @@ async function run(): Promise<void> {
     if (postComment && ctx.payload.pull_request) {
       await renderReport(octokit, ctx, report)
       core.info('PR comment posted')
+    }
+
+    if (failOnFlaky && report.flaky.length > 0) {
+      core.setFailed(`${report.flaky.length} flaky job(s) detected: ${report.flaky.map(f => f.jobName).join(', ')}`)
+      return
     }
 
     core.info(`Done — ${report.flaky.length} flaky job(s) found`)
