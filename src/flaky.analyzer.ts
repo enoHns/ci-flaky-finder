@@ -131,7 +131,7 @@ function detectPattern(
   const failHours = history
     .filter(r => r.conclusion === 'failure')
     .map(r => new Date(r.startedAt).getUTCHours())
-  if (failHours.length >= 3 && new Set(failHours).size <= 3) return 'time-dependent'
+  if (failHours.length >= 3 && new Set(failHours).size < failHours.length) return 'time-dependent'
 
   const durations = history.map(r => r.durationMs)
   const trend     = linearTrend(durations)
