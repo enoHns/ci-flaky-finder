@@ -1,4 +1,4 @@
-import { average, stdDev, coefficientOfVariation, linearTrend } from '../math'
+import { average, stdDev, coefficientOfVariation, linearTrend, pearsonCorrelation } from '../math'
 
 describe('average', () => {
   it('returns 0 for empty array', () => expect(average([])).toBe(0))
@@ -29,5 +29,21 @@ describe('linearTrend', () => {
   })
   it('returns near 0 for flat series', () => {
     expect(Math.abs(linearTrend([100, 100, 100, 100]))).toBeLessThan(0.01)
+  })
+})
+
+describe('pearsonCorrelation', () => {
+  it('returns 0 for fewer than 3 elements', () => expect(pearsonCorrelation([1, 2])).toBe(0))
+  it('returns ~1 for a perfectly increasing sequence', () => {
+    expect(pearsonCorrelation([10, 20, 30, 40, 50])).toBeCloseTo(1, 5)
+  })
+  it('returns ~-1 for a perfectly decreasing sequence', () => {
+    expect(pearsonCorrelation([50, 40, 30, 20, 10])).toBeCloseTo(-1, 5)
+  })
+  it('returns ~0 for a flat sequence', () => {
+    expect(Math.abs(pearsonCorrelation([100, 100, 100, 100]))).toBeLessThan(0.01)
+  })
+  it('returns ~0 for a random oscillating sequence', () => {
+    expect(Math.abs(pearsonCorrelation([10, 90, 5, 95, 10, 90, 5]))).toBeLessThan(0.2)
   })
 })

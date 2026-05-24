@@ -20,6 +20,7 @@ export interface FlakyReport {
 
 export interface JobRun {
   runId:        number
+  jobId:        number
   conclusion:   string
   startedAt:    string
   completedAt:  string | null

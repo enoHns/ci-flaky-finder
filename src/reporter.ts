@@ -47,13 +47,20 @@ function buildComment(report: FlakyReport): string {
       lines.push(`> 🆕 ${report.newFlaky.length} newly appeared this run\n`)
     }
 
-    lines.push('| Job | Pattern | Failure rate | CV | Suggested fix |')
-    lines.push('|-----|---------|-------------|-----|---------------|')
+    lines.push('| Job | Pattern | Failure rate | CV | Hint |')
+    lines.push('|-----|---------|-------------|-----|------|')
+
+    const shortHint: Record<string, string> = {
+      'intermittent':       'Add retries, check race conditions',
+      'slow-degrading':     'Memory leak or growing fixtures',
+      'time-dependent':     'Mock shared resources',
+      'resource-sensitive': 'Upsize runner or parallelize',
+    }
 
     for (const t of report.flaky) {
       const rate = `${(t.failureRate * 100).toFixed(0)}%`
       const cv   = t.durationCV > 0 ? `${(t.durationCV * 100).toFixed(0)}%` : '—'
-      lines.push(`| \`${t.jobName}\` | ${t.pattern} | ${rate} | ${cv} | ${t.suggestedFix} |`)
+      lines.push(`| \`${t.jobName}\` | ${t.pattern} | ${rate} | ${cv} | ${shortHint[t.pattern] ?? t.pattern} |`)
     }
 
     lines.push('')
@@ -61,6 +68,12 @@ function buildComment(report: FlakyReport): string {
     for (const t of report.flaky) {
       lines.push(formatJobDetail(t))
     }
+    lines.push('</details>')
+  }
+
+  if (report.improved.length > 0) {
+    lines.push(`\n<details><summary>📈 Improved — no longer flaky (${report.improved.length})</summary>\n`)
+    lines.push(report.improved.map(s => `- \`${s}\``).join('\n'))
     lines.push('</details>')
   }
 

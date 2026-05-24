@@ -12,6 +12,11 @@ inputs:
     required: true
     default: ${{ github.token }}
 
+  workflow:
+    description: 'Workflow file to analyze (e.g. ci.yml). Defaults to the workflow that triggered this action.'
+    required: false
+    default: ''
+
   lookback-runs:
     description: 'Number of past workflow runs to analyze (max 100)'
     required: false
@@ -26,6 +31,26 @@ inputs:
     description: 'Fail the step if any flaky job is detected'
     required: false
     default: 'false'
+
+  ai-suggestions:
+    description: 'Analyze actual job logs with an LLM to generate targeted fix suggestions. Uses github-token with GitHub Models — add `permissions: models: read` to your workflow job. Set ai-token to use a different service key.'
+    required: false
+    default: 'false'
+
+  ai-model:
+    description: 'Model for AI suggestions. Defaults to gpt-4o-mini. Any model available on GitHub Models works, e.g. gpt-4o, Phi-4, Meta-Llama-3.1-70B-Instruct.'
+    required: false
+    default: 'gpt-4o-mini'
+
+  ai-token:
+    description: 'Token for the AI API. Defaults to github-token if not set. Provide a fine-grained PAT with models:read or an alternative service key here.'
+    required: false
+    default: ''
+
+  ai-endpoint:
+    description: 'OpenAI-compatible chat completions endpoint. Defaults to GitHub Models. Use https://api.openai.com/v1/chat/completions for OpenAI direct, or your Azure OpenAI deployment URL.'
+    required: false
+    default: 'https://models.inference.ai.azure.com/chat/completions'
 
 outputs:
   flaky-count:
