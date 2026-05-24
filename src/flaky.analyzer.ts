@@ -246,7 +246,7 @@ function buildSuggestedFix(
       const oldestS  = Math.round(durChron[0] / 1000)
       const newestS  = Math.round(durChron[durChron.length - 1] / 1000)
       const growthPct = oldestS > 0 ? Math.round((newestS - oldestS) / oldestS * 100) : 0
-      return `Duration grew from ~${oldestS}s to ~${newestS}s (+${growthPct}% over ${history.length} runs). Profile step \"${stepName}\" for memory leaks or growing test fixtures.`
+      return `Duration grew from ~${oldestS}s to ~${newestS}s (+${growthPct}% over ${history.length} runs). Profile step "${stepName}" for memory leaks or growing test fixtures.`
     }
     case 'resource-sensitive': {
       const durs = history.map(r => r.durationMs).filter(d => d > 0)
@@ -257,7 +257,7 @@ function buildSuggestedFix(
     }
     case 'intermittent': {
       const failCount = Math.round(recentFailRate * recentCount)
-      return `Failed ${failCount}/${recentCount} recent runs (${Math.round(recentFailRate * 100)}%). Step \"${stepName}\" is the culprit. Add retry logic (max 2) and check for race conditions or shared state.`
+      return `Failed ${failCount}/${recentCount} recent runs (${Math.round(recentFailRate * 100)}%). Step "${stepName}" is the culprit. Add retry logic (max 2) and check for race conditions or shared state.`
     }
   }
 }
