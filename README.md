@@ -3,73 +3,59 @@
 [![CI](https://github.com/enoHns/flaky-finder/actions/workflows/ci.yml/badge.svg)](https://github.com/enoHns/flaky-finder/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> Detect flaky tests in your GitHub Actions workflows — no setup, no config file, one step.
+Detects flaky CI jobs and posts a PR comment with failure rate, pattern, and a concrete fix suggestion.
 
----
-
-## What it does
-
-**flaky-finder** analyzes your last N workflow runs and finds jobs that pass sometimes and fail others. For each flaky job it tells you:
-
-- **Failure rate** — how often it fails
-- **Pattern** — *intermittent*, *slow-degrading*, *time-dependent*, or *resource-sensitive*
-- **Which step** inside the job is actually failing
-- **A specific fix** for that pattern
-
-Results land as a PR comment, updated on every push.
-
----
-
-## Install
+## Usage
 
 ```yaml
-# .github/workflows/ci.yml
-- name: Check for flaky tests
-  uses: enoHns/flaky-finder@v1
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+- uses: enoHns/flaky-finder@v1
 ```
 
-That's it.
-
----
+No config needed. Analyzes the workflow that triggered the action, posts results as a PR comment.
 
 ## Inputs
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `github-token` | required | Token with `actions:read` + `pull-requests:write` |
-| `lookback-runs` | `30` | Number of past runs to analyze (max 100) |
-| `post-comment` | `true` | Post/update a PR comment with the report |
+| `github-token` | `${{ github.token }}` | Needs `actions:read` + `pull-requests:write` |
+| `workflow` | auto | Workflow file to analyze (e.g. `ci.yml`) |
+| `lookback-runs` | `30` | Past runs to analyze (max 100) |
+| `post-comment` | `true` | Post/update a PR comment |
+| `fail-on-flaky` | `false` | Fail the step if flaky jobs are found |
+| `ai-suggestions` | `false` | Analyze job logs with an LLM for targeted fix suggestions |
+| `ai-model` | `gpt-4o-mini` | Any model on [GitHub Models](https://github.com/marketplace/models) |
+| `ai-token` | `github-token` | Override with a different service key |
+| `ai-endpoint` | GitHub Models | Override with any OpenAI-compatible endpoint |
 
-## Outputs
+## AI suggestions
 
-| Output | Description |
-|--------|-------------|
-| `flaky-count` | Number of flaky jobs detected |
+Requires `permissions: models: read`. Falls back silently to built-in suggestions on any error.
 
----
+```yaml
+jobs:
+  check:
+    permissions:
+      actions: read
+      pull-requests: write
+      models: read
+    steps:
+      - uses: enoHns/flaky-finder@v1
+        with:
+          ai-suggestions: true
+```
 
-## How it works
+## Patterns
 
-1. Fetches the last N workflow runs for your repo
-2. For each job, computes failure rate and duration coefficient of variation
-3. Classifies as flaky if: `5% < failure_rate < 85%` or `duration_cv > 40%`
-4. Detects failure pattern using time clustering and linear trend analysis
-5. Posts a PR comment with job-level details and a concrete suggested fix
+| Pattern | Signal |
+|---------|--------|
+| `intermittent` | Random pass/fail in recent runs |
+| `slow-degrading` | Duration increasing over time (Pearson r > 0.8) |
+| `time-dependent` | Failures cluster at specific UTC hours |
+| `resource-sensitive` | Duration variance > 40% CV |
 
----
+## Privacy
 
-## Failure patterns
-
-| Pattern | Diagnosis | Fix |
-|---------|-----------|-----|
-| `intermittent` | Passes and fails randomly | Add retry logic, check race conditions |
-| `slow-degrading` | Gets slower over time | Memory leak or growing fixtures |
-| `time-dependent` | Fails at specific hours | Shared resource under load — mock it |
-| `resource-sensitive` | Duration varies wildly | Runner contention — upsize or parallelize |
-
----
+Reads workflow metadata via GitHub API. Nothing leaves GitHub. When `ai-suggestions: true`, the last 3000 chars of failed job logs are sent to the AI endpoint.
 
 ## License
 
