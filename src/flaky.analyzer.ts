@@ -55,7 +55,6 @@ export async function detectFlaky(
     if (i + batchSize < runs.length) await new Promise(r => setTimeout(r, 1000))
   }
 
-  // sort newest first
   for (const [, history] of jobHistories.entries()) {
     history.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
   }
@@ -91,7 +90,6 @@ export async function detectFlaky(
     const durations  = history.map(r => r.durationMs).filter(d => d > 0)
     const durationCV = durations.length > 1 ? coefficientOfVariation(durations) : 0
 
-    // Was flaky before but fully recovered in recent runs
     if (olderFailRate > 0.05 && recentFails === 0 && older.length >= 3) {
       improved.push(jobName)
       continue
@@ -128,7 +126,6 @@ export async function detectFlaky(
     }
   }
 
-  // fire AI calls in parallel
   const suggestedFixes = await Promise.all(
     candidates.map(c =>
       aiToken && c.lastFailed
@@ -189,8 +186,11 @@ function findFlakyStep(history: JobRun[]): string {
   return worstStep
 }
 
-export function isTimeDependentPattern(failHours: number[]): boolean {
-  if (failHours.length < 4) return false
+export function isTimeDependentPattern(failTimestamps: string[]): boolean {
+  if (failTimestamps.length < 4) return false
+  const dates = new Set(failTimestamps.map(ts => ts.slice(0, 10)))
+  if (dates.size < 2) return false
+  const failHours = failTimestamps.map(ts => new Date(ts).getUTCHours())
   const hourCounts = new Array(24).fill(0)
   for (const h of failHours) hourCounts[h]++
   if (Math.max(...hourCounts) < 2) return false
@@ -204,11 +204,11 @@ function detectPattern(
   recentFailRate: number,
   durationCV: number,
 ): FlakyTest['pattern'] {
-  const failHours = history
+  const failTimestamps = history
     .filter(r => r.conclusion === 'failure')
-    .map(r => new Date(r.startedAt).getUTCHours())
+    .map(r => r.startedAt)
 
-  if (isTimeDependentPattern(failHours)) return 'time-dependent'
+  if (isTimeDependentPattern(failTimestamps)) return 'time-dependent'
 
   const durationsChron = [...history].reverse().map(r => r.durationMs)
   const r = pearsonCorrelation(durationsChron)

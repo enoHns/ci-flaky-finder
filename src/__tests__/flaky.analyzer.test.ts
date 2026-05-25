@@ -40,8 +40,7 @@ function makeMockOctokit(histories: Record<string, RunSpec[]>) {
   } as any
 }
 
-// Build an array of runs for a single job where newest is first (descending time)
-// conclusions[0] = most recent run
+// conclusions[0] = most recent
 function buildRuns(conclusions: string[], baseMs: number, hourMs = 3_600_000): RunSpec[] {
   return conclusions.map((conclusion, i) => {
     const startedAt = new Date(baseMs + (conclusions.length - 1 - i) * hourMs).toISOString()
@@ -243,36 +242,69 @@ describe('detectFlaky', () => {
 
 describe('isTimeDependentPattern', () => {
   it('returns false with fewer than 4 failures', () => {
-    expect(isTimeDependentPattern([10, 10, 10])).toBe(false)
+    const ts = ['2026-03-01T10:00:00Z', '2026-03-02T10:00:00Z', '2026-03-03T10:00:00Z']
+    expect(isTimeDependentPattern(ts)).toBe(false)
   })
 
-  it('returns true when failures cluster heavily in few hours', () => {
-    // All failures at hour 10 and 11
-    expect(isTimeDependentPattern([10, 10, 11, 10, 11, 10, 11, 10])).toBe(true)
+  it('returns true when failures cluster heavily in few hours across multiple days', () => {
+    // All failures at hour 10 or 11, one per day over 8 days
+    const ts = [
+      '2026-03-01T10:00:00Z', '2026-03-02T10:30:00Z', '2026-03-03T11:00:00Z',
+      '2026-03-04T10:15:00Z', '2026-03-05T11:30:00Z', '2026-03-06T10:00:00Z',
+      '2026-03-07T11:00:00Z', '2026-03-08T10:45:00Z',
+    ]
+    expect(isTimeDependentPattern(ts)).toBe(true)
   })
 
   it('returns false when failures are spread evenly across the day', () => {
-    const hours = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
-    expect(isTimeDependentPattern(hours)).toBe(false)
+    // Each failure at a different hour on a different day
+    const ts = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22].map((h, i) =>
+      `2026-03-${String(i + 1).padStart(2, '0')}T${String(h).padStart(2, '0')}:00:00Z`
+    )
+    expect(isTimeDependentPattern(ts)).toBe(false)
   })
 
   it('returns false for 4 failures each in a different hour (no repetition)', () => {
-    expect(isTimeDependentPattern([3, 9, 15, 21])).toBe(false)
+    const ts = [
+      '2026-03-01T03:00:00Z', '2026-03-02T09:00:00Z',
+      '2026-03-03T15:00:00Z', '2026-03-04T21:00:00Z',
+    ]
+    expect(isTimeDependentPattern(ts)).toBe(false)
   })
 
-  it('handles all failures in the same hour', () => {
-    expect(isTimeDependentPattern([14, 14, 14, 14, 14])).toBe(true)
+  it('returns false when all failures happen on the same calendar day', () => {
+    const ts = [
+      '2026-05-24T20:10:00Z', '2026-05-24T20:25:00Z', '2026-05-24T20:40:00Z',
+      '2026-05-24T20:53:00Z', '2026-05-24T21:05:00Z',
+    ]
+    expect(isTimeDependentPattern(ts)).toBe(false)
   })
 
-  it('returns true when top 3 hours cover >= 60% of failures with repetition', () => {
+  it('returns true when all failures recur at the same hour across multiple days', () => {
+    const ts = [
+      '2026-03-01T14:00:00Z', '2026-03-02T14:30:00Z', '2026-03-03T14:00:00Z',
+      '2026-03-04T14:15:00Z', '2026-03-05T14:00:00Z',
+    ]
+    expect(isTimeDependentPattern(ts)).toBe(true)
+  })
+
+  it('returns true when top 3 hours cover >= 60% of failures with repetition across days', () => {
     // 6 failures at hours 10,11,12 (repeated) + 4 spread elsewhere → top3 = 6/10 = 60%
-    const hours = [10, 11, 12, 10, 11, 12, 2, 8, 14, 20]
-    expect(isTimeDependentPattern(hours)).toBe(true)
+    const ts = [
+      '2026-03-01T10:00:00Z', '2026-03-02T11:00:00Z', '2026-03-03T12:00:00Z',
+      '2026-03-04T10:30:00Z', '2026-03-05T11:00:00Z', '2026-03-06T12:00:00Z',
+      '2026-03-07T02:00:00Z', '2026-03-08T08:00:00Z', '2026-03-09T14:00:00Z', '2026-03-10T20:00:00Z',
+    ]
+    expect(isTimeDependentPattern(ts)).toBe(true)
   })
 
   it('returns false when no single hour repeats even if many failures', () => {
-    // 8 failures each at a unique hour
-    const hours = [1, 3, 7, 11, 15, 17, 19, 22]
-    expect(isTimeDependentPattern(hours)).toBe(false)
+    // 8 failures each at a unique hour on a different day
+    const ts = [
+      '2026-03-01T01:00:00Z', '2026-03-02T03:00:00Z', '2026-03-03T07:00:00Z',
+      '2026-03-04T11:00:00Z', '2026-03-05T15:00:00Z', '2026-03-06T17:00:00Z',
+      '2026-03-07T19:00:00Z', '2026-03-08T22:00:00Z',
+    ]
+    expect(isTimeDependentPattern(ts)).toBe(false)
   })
 })
