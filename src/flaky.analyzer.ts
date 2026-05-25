@@ -105,7 +105,7 @@ export async function detectFlaky(
     if (isNondeterministic || isTimingUnstable) {
       if (olderFails === 0 && older.length >= 3) newFlakyNames.add(jobName)
 
-      const pattern    = detectPattern(history, recentFailRate, durationCV)
+      const pattern    = detectPattern(history, durationCV)
       const stepName   = findFlakyStep(history)
       const lastFailed = history
         .filter(r => r.conclusion === 'failure')
@@ -225,7 +225,6 @@ export function isTimeDependentPattern(failTimestamps: string[]): boolean {
 
 function detectPattern(
   history: JobRun[],  // newest first
-  recentFailRate: number,
   durationCV: number,
 ): FlakyTest['pattern'] {
   if (isRunnerDependentPattern(history)) return 'runner-dependent'
