@@ -32811,7 +32811,7 @@ async function detectFlaky(octokit, owner, repo, runs, aiToken, aiModel = 'gpt-4
         if (recentFailRate >= 0.85)
             continue;
         const isNondeterministic = recentFailRate > 0.05;
-        const isTimingUnstable = durationCV > 0.40 && recentFailRate < 0.85;
+        const isTimingUnstable = durationCV > 0.40 && recentFailRate > 0 && recentFailRate < 0.85;
         if (isNondeterministic || isTimingUnstable) {
             if (olderFails === 0 && older.length >= 3)
                 newFlakyNames.add(jobName);
