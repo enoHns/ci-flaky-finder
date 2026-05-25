@@ -42,6 +42,7 @@ export async function detectFlaky(
               ? new Date(s.completed_at).getTime() - new Date(s.started_at).getTime()
               : 0,
           })) ?? [],
+          runnerName: job.runner_name ?? undefined,
         })
       }
     } catch {
@@ -186,6 +187,29 @@ function findFlakyStep(history: JobRun[]): string {
   return worstStep
 }
 
+export function isRunnerDependentPattern(history: JobRun[]): boolean {
+  const runsWithRunner = history.filter(r => r.runnerName)
+  if (runsWithRunner.length < MIN_RUNS) return false
+
+  const failsByRunner = new Map<string, number>()
+  const totalByRunner = new Map<string, number>()
+  for (const run of runsWithRunner) {
+    const name = run.runnerName!
+    totalByRunner.set(name, (totalByRunner.get(name) ?? 0) + 1)
+    if (run.conclusion === 'failure') {
+      failsByRunner.set(name, (failsByRunner.get(name) ?? 0) + 1)
+    }
+  }
+
+  if (totalByRunner.size < 2) return false
+
+  for (const [runner, fails] of failsByRunner.entries()) {
+    const total = totalByRunner.get(runner)!
+    if (total >= 3 && fails / total > 0.6) return true
+  }
+  return false
+}
+
 export function isTimeDependentPattern(failTimestamps: string[]): boolean {
   if (failTimestamps.length < 4) return false
   const dates = new Set(failTimestamps.map(ts => ts.slice(0, 10)))
@@ -204,6 +228,8 @@ function detectPattern(
   recentFailRate: number,
   durationCV: number,
 ): FlakyTest['pattern'] {
+  if (isRunnerDependentPattern(history)) return 'runner-dependent'
+
   const failTimestamps = history
     .filter(r => r.conclusion === 'failure')
     .map(r => r.startedAt)
@@ -227,6 +253,25 @@ function buildSuggestedFix(
   recentCount:    number,
 ): string {
   switch (pattern) {
+    case 'runner-dependent': {
+      const failsByRunner = new Map<string, number>()
+      const totalByRunner = new Map<string, number>()
+      for (const run of history) {
+        if (!run.runnerName) continue
+        totalByRunner.set(run.runnerName, (totalByRunner.get(run.runnerName) ?? 0) + 1)
+        if (run.conclusion === 'failure') {
+          failsByRunner.set(run.runnerName, (failsByRunner.get(run.runnerName) ?? 0) + 1)
+        }
+      }
+      let worstRunner = 'unknown'
+      let worstRate = 0
+      for (const [runner, fails] of failsByRunner.entries()) {
+        const rate = fails / totalByRunner.get(runner)!
+        if (rate > worstRate) { worstRate = rate; worstRunner = runner }
+      }
+      const worstPct = Math.round(worstRate * 100)
+      return `${worstPct}% failures on runner "${worstRunner}". Failures are tied to this specific runner (missing tools, no registry/Nexus access, wrong environment). Pin the job with \`runs-on: [self-hosted, <required-tag>]\` or fix the runner configuration.`
+    }
     case 'time-dependent': {
       const failHours = history
         .filter(r => r.conclusion === 'failure')

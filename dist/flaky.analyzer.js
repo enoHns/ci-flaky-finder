@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.detectFlaky = detectFlaky;
+exports.isRunnerDependentPattern = isRunnerDependentPattern;
 exports.isTimeDependentPattern = isTimeDependentPattern;
 const core = __importStar(require("@actions/core"));
 const math_1 = require("./math");
@@ -65,6 +66,7 @@ async function detectFlaky(octokit, owner, repo, runs, aiToken, aiModel = 'gpt-4
                             ? new Date(s.completed_at).getTime() - new Date(s.started_at).getTime()
                             : 0,
                     })) ?? [],
+                    runnerName: job.runner_name ?? undefined,
                 });
             }
         }
@@ -178,6 +180,28 @@ function findFlakyStep(history) {
     }
     return worstStep;
 }
+function isRunnerDependentPattern(history) {
+    const runsWithRunner = history.filter(r => r.runnerName);
+    if (runsWithRunner.length < MIN_RUNS)
+        return false;
+    const failsByRunner = new Map();
+    const totalByRunner = new Map();
+    for (const run of runsWithRunner) {
+        const name = run.runnerName;
+        totalByRunner.set(name, (totalByRunner.get(name) ?? 0) + 1);
+        if (run.conclusion === 'failure') {
+            failsByRunner.set(name, (failsByRunner.get(name) ?? 0) + 1);
+        }
+    }
+    if (totalByRunner.size < 2)
+        return false;
+    for (const [runner, fails] of failsByRunner.entries()) {
+        const total = totalByRunner.get(runner);
+        if (total >= 3 && fails / total > 0.6)
+            return true;
+    }
+    return false;
+}
 function isTimeDependentPattern(failTimestamps) {
     if (failTimestamps.length < 4)
         return false;
@@ -196,6 +220,8 @@ function isTimeDependentPattern(failTimestamps) {
 }
 function detectPattern(history, // newest first
 recentFailRate, durationCV) {
+    if (isRunnerDependentPattern(history))
+        return 'runner-dependent';
     const failTimestamps = history
         .filter(r => r.conclusion === 'failure')
         .map(r => r.startedAt);
@@ -211,6 +237,29 @@ recentFailRate, durationCV) {
 }
 function buildSuggestedFix(pattern, history, recentFailRate, durationCV, stepName, recentCount) {
     switch (pattern) {
+        case 'runner-dependent': {
+            const failsByRunner = new Map();
+            const totalByRunner = new Map();
+            for (const run of history) {
+                if (!run.runnerName)
+                    continue;
+                totalByRunner.set(run.runnerName, (totalByRunner.get(run.runnerName) ?? 0) + 1);
+                if (run.conclusion === 'failure') {
+                    failsByRunner.set(run.runnerName, (failsByRunner.get(run.runnerName) ?? 0) + 1);
+                }
+            }
+            let worstRunner = 'unknown';
+            let worstRate = 0;
+            for (const [runner, fails] of failsByRunner.entries()) {
+                const rate = fails / totalByRunner.get(runner);
+                if (rate > worstRate) {
+                    worstRate = rate;
+                    worstRunner = runner;
+                }
+            }
+            const worstPct = Math.round(worstRate * 100);
+            return `${worstPct}% failures on runner "${worstRunner}". Failures are tied to this specific runner (missing tools, no registry/Nexus access, wrong environment). Pin the job with \`runs-on: [self-hosted, <required-tag>]\` or fix the runner configuration.`;
+        }
         case 'time-dependent': {
             const failHours = history
                 .filter(r => r.conclusion === 'failure')

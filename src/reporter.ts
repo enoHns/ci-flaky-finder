@@ -55,6 +55,7 @@ function buildComment(report: FlakyReport): string {
       'slow-degrading':     'Memory leak or growing fixtures',
       'time-dependent':     'Mock shared resources',
       'resource-sensitive': 'Upsize runner or parallelize',
+      'runner-dependent':   'Pin job to a specific runner tag',
     }
 
     for (const t of report.flaky) {

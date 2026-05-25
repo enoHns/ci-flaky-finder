@@ -1,14 +1,15 @@
-import { detectFlaky, isTimeDependentPattern } from '../flaky.analyzer'
+import { detectFlaky, isTimeDependentPattern, isRunnerDependentPattern } from '../flaky.analyzer'
 
 jest.setTimeout(30000)
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function makeRun(id: number, conclusion: string, startedAt: string, durationMs = 30000) {
+function makeRun(id: number, conclusion: string, startedAt: string, durationMs = 30000, runnerName?: string) {
   const completedAt = new Date(new Date(startedAt).getTime() + durationMs).toISOString()
   return {
     id, conclusion, startedAt, completedAt, durationMs,
     steps: [{ name: 'Run tests', conclusion, durationMs }],
+    runnerName,
   }
 }
 
@@ -26,6 +27,7 @@ function makeMockOctokit(histories: Record<string, RunSpec[]>) {
             conclusion:   run.conclusion,
             started_at:   run.startedAt,
             completed_at: run.completedAt,
+            runner_name:  run.runnerName ?? null,
             steps: run.steps.map(s => ({
               name:         s.name,
               conclusion:   s.conclusion,
@@ -306,5 +308,115 @@ describe('isTimeDependentPattern', () => {
       '2026-03-07T19:00:00Z', '2026-03-08T22:00:00Z',
     ]
     expect(isTimeDependentPattern(ts)).toBe(false)
+  })
+})
+
+// ─── isRunnerDependentPattern ─────────────────────────────────────────────────
+
+function makeJobRun(conclusion: string, runnerName?: string, startedAt = '2026-03-01T10:00:00Z') {
+  return {
+    runId: Math.random(), jobId: Math.random(), conclusion,
+    startedAt, completedAt: startedAt, durationMs: 30000,
+    steps: [], runnerName,
+  }
+}
+
+describe('isRunnerDependentPattern', () => {
+  it('returns false when no runner names are available', () => {
+    const history = Array.from({ length: 8 }, (_, i) =>
+      makeJobRun(i % 2 === 0 ? 'failure' : 'success')
+    )
+    expect(isRunnerDependentPattern(history)).toBe(false)
+  })
+
+  it('returns false with fewer than MIN_RUNS runs that have a runner name', () => {
+    const history = [
+      makeJobRun('failure', 'runner-bad'),
+      makeJobRun('failure', 'runner-bad'),
+      makeJobRun('success', 'runner-good'),
+    ]
+    expect(isRunnerDependentPattern(history)).toBe(false)
+  })
+
+  it('returns false when only one distinct runner is observed', () => {
+    const history = Array.from({ length: 8 }, (_, i) =>
+      makeJobRun(i % 2 === 0 ? 'failure' : 'success', 'runner-only')
+    )
+    expect(isRunnerDependentPattern(history)).toBe(false)
+  })
+
+  it('returns true when one runner fails >60% and others are stable', () => {
+    // runner-nexus fails 4/5 times; runner-default never fails
+    const history = [
+      makeJobRun('failure', 'runner-nexus'),
+      makeJobRun('failure', 'runner-nexus'),
+      makeJobRun('failure', 'runner-nexus'),
+      makeJobRun('failure', 'runner-nexus'),
+      makeJobRun('success', 'runner-nexus'),
+      makeJobRun('success', 'runner-default'),
+      makeJobRun('success', 'runner-default'),
+      makeJobRun('success', 'runner-default'),
+    ]
+    expect(isRunnerDependentPattern(history)).toBe(true)
+  })
+
+  it('returns false when failures are spread evenly across all runners', () => {
+    // Both runners fail ~50% — not runner-specific
+    const history = [
+      makeJobRun('failure', 'runner-a'),
+      makeJobRun('success', 'runner-a'),
+      makeJobRun('failure', 'runner-a'),
+      makeJobRun('success', 'runner-a'),
+      makeJobRun('failure', 'runner-b'),
+      makeJobRun('success', 'runner-b'),
+      makeJobRun('failure', 'runner-b'),
+      makeJobRun('success', 'runner-b'),
+    ]
+    expect(isRunnerDependentPattern(history)).toBe(false)
+  })
+
+  it('returns false when the bad runner has fewer than 3 runs', () => {
+    // runner-bad fails 2/2 (100%) but only 2 runs — not enough evidence
+    const history = [
+      makeJobRun('failure', 'runner-bad'),
+      makeJobRun('failure', 'runner-bad'),
+      makeJobRun('success', 'runner-good'),
+      makeJobRun('success', 'runner-good'),
+      makeJobRun('success', 'runner-good'),
+      makeJobRun('success', 'runner-good'),
+    ]
+    expect(isRunnerDependentPattern(history)).toBe(false)
+  })
+})
+
+// ─── detectFlaky — runner-dependent integration ───────────────────────────────
+
+describe('detectFlaky runner-dependent', () => {
+  it('detects runner-dependent pattern when one runner fails consistently', async () => {
+    const nexusRuns   = [1,3,5,7,9].map(i  => makeRun(i, 'failure', new Date(BASE + i * HOUR).toISOString(), 30000, 'runner-nexus'))
+    const defaultRuns = [2,4,6,8,10].map(i => makeRun(i, 'success', new Date(BASE + i * HOUR).toISOString(), 30000, 'runner-default'))
+    const runs = [...nexusRuns, ...defaultRuns].sort((a, b) =>
+      new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    )
+    const octokit = makeMockOctokit({ build: runs })
+    const report = await detectFlaky(octokit, 'o', 'r', runs.map(r => ({
+      id: r.id, conclusion: r.conclusion, started_at: r.startedAt, completed_at: r.completedAt,
+    })))
+    const job = report.flaky.find(f => f.jobName === 'build')
+    expect(job).toBeDefined()
+    expect(job!.pattern).toBe('runner-dependent')
+    expect(job!.suggestedFix).toContain('runner-nexus')
+  })
+
+  it('does NOT flag runner-dependent when runner names are absent', async () => {
+    const runs = [1,3,5].map(i => makeRun(i, 'failure', new Date(BASE + i * HOUR).toISOString()))
+      .concat([2,4,6,7,8,9,10].map(i => makeRun(i, 'success', new Date(BASE + i * HOUR).toISOString())))
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+    const octokit = makeMockOctokit({ ci: runs })
+    const report = await detectFlaky(octokit, 'o', 'r', runs.map(r => ({
+      id: r.id, conclusion: r.conclusion, started_at: r.startedAt, completed_at: r.completedAt,
+    })))
+    const job = report.flaky.find(f => f.jobName === 'ci')
+    if (job) expect(job.pattern).not.toBe('runner-dependent')
   })
 })

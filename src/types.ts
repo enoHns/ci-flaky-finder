@@ -6,7 +6,7 @@ export interface FlakyTest {
   avgDurationMs: number
   durationCV:   number
   lastFailedAt: string
-  pattern:      'intermittent' | 'slow-degrading' | 'time-dependent' | 'resource-sensitive'
+  pattern:      'intermittent' | 'slow-degrading' | 'time-dependent' | 'resource-sensitive' | 'runner-dependent'
   suggestedFix: string
 }
 
@@ -26,4 +26,5 @@ export interface JobRun {
   completedAt:  string | null
   durationMs:   number
   steps:        { name: string; conclusion: string; durationMs: number }[]
+  runnerName?:  string
 }
