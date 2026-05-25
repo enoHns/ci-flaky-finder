@@ -32849,6 +32849,7 @@ async function detectFlaky(octokit, owner, repo, runs, aiToken, aiModel = 'gpt-4
         lastFailedAt: c.lastFailed?.startedAt ?? '',
         pattern: c.pattern,
         suggestedFix: suggestedFixes[i],
+        templateFix: suggestedFixes[i] !== c.templateFix ? c.templateFix : undefined,
     }));
     flaky.sort((a, b) => b.failureRate - a.failureRate);
     core.info(`  ${flaky.length} flaky, ${improved.length} improved, ${stable.length} stable (${jobHistories.size} jobs total)`);
@@ -33284,6 +33285,7 @@ function formatJobDetail(t) {
         `- **Last failed**: ${t.lastFailedAt || 'unknown'}`,
         `- **Pattern**: \`${t.pattern}\``,
         `- **Fix**: ${t.suggestedFix}`,
+        ...(t.templateFix ? [`- **Baseline fix**: ${t.templateFix}`] : []),
         '',
     ];
     return lines.join('\n');

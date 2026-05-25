@@ -145,6 +145,7 @@ export async function detectFlaky(
     lastFailedAt:  c.lastFailed?.startedAt ?? '',
     pattern:       c.pattern,
     suggestedFix:  suggestedFixes[i],
+    templateFix:   suggestedFixes[i] !== c.templateFix ? c.templateFix : undefined,
   }))
 
   flaky.sort((a, b) => b.failureRate - a.failureRate)

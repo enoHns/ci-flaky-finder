@@ -96,6 +96,7 @@ function formatJobDetail(t: FlakyTest): string {
     `- **Last failed**: ${t.lastFailedAt || 'unknown'}`,
     `- **Pattern**: \`${t.pattern}\``,
     `- **Fix**: ${t.suggestedFix}`,
+    ...(t.templateFix ? [`- **Baseline fix**: ${t.templateFix}`] : []),
     '',
   ]
   return lines.join('\n')

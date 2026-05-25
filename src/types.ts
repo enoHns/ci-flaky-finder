@@ -8,6 +8,7 @@ export interface FlakyTest {
   lastFailedAt: string
   pattern:      'intermittent' | 'slow-degrading' | 'time-dependent' | 'resource-sensitive' | 'runner-dependent'
   suggestedFix: string
+  templateFix?:  string
 }
 
 export interface FlakyReport {
