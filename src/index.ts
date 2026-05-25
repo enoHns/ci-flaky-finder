@@ -26,19 +26,25 @@ async function run(): Promise<void> {
 
     core.info(`flaky-finder — ${owner}/${repo}, workflow: ${workflow || 'all'}, lookback: ${lookback}`)
 
-    const perPage = Math.min(lookback, 100)
-    let runs: any[]
-
-    if (workflow) {
-      const { data } = await octokit.actions.listWorkflowRuns({
-        owner, repo, workflow_id: workflow, per_page: perPage, status: 'completed',
-      })
-      runs = data.workflow_runs
-    } else {
-      const { data } = await octokit.actions.listWorkflowRunsForRepo({
-        owner, repo, per_page: perPage, status: 'completed',
-      })
-      runs = data.workflow_runs
+    let runs: any[] = []
+    let page = 1
+    while (runs.length < lookback) {
+      const perPage = Math.min(lookback - runs.length, 100)
+      let batch: any[]
+      if (workflow) {
+        const { data } = await octokit.actions.listWorkflowRuns({
+          owner, repo, workflow_id: workflow, per_page: perPage, page, status: 'completed',
+        })
+        batch = data.workflow_runs
+      } else {
+        const { data } = await octokit.actions.listWorkflowRunsForRepo({
+          owner, repo, per_page: perPage, page, status: 'completed',
+        })
+        batch = data.workflow_runs
+      }
+      runs = runs.concat(batch)
+      if (batch.length < perPage) break
+      page++
     }
 
     const report = await detectFlaky(octokit, owner, repo, runs, aiToken, aiModel, aiEndpoint)
