@@ -4,7 +4,7 @@
   "description": "GitHub Action — detect flaky tests in CI pipelines",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "ncc build src/index.ts -o dist --license licenses.txt",
     "test": "jest",
     "lint": "eslint src --ext .ts"
   },
